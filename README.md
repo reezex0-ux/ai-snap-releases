@@ -9,8 +9,18 @@ Windows 화면을 캡처하고 마킹한 뒤 클립보드에 복사하는 도구
 배포 파일은 Git 소스에 넣지 않고 [GitHub Releases](https://github.com/reezex0-ux/ai-snap-releases/releases)에서 별도로 제공합니다. 소스코드는 비공개이며 공개 배포 저장소에는 사용 안내와 실행 파일·APK만 게시합니다. 릴리스가 아직 게시되지 않았다면 다운로드 파일이 표시되지 않을 수 있습니다.
 
 1. Windows ZIP을 고정된 폴더에 풀고 `AISnap.exe`를 실행합니다. .NET 별도 설치나 관리자 실행은 필요하지 않습니다.
-2. 휴대폰에는 같은 릴리스의 Android APK를 내려받아 설치합니다. PC의 QR은 연결용이며 APK 설치 링크가 아닙니다.
+2. 휴대폰에는 아래 **Android APK 고정 다운로드** 주소에서 최신 APK를 내려받아 설치합니다. PC 화면에 표시되는 QR은 같은 Wi-Fi 연결용이며 APK 설치 링크가 아닙니다.
 3. 배포 파일은 릴리스의 `SHA256SUMS.txt`와 비교할 수 있습니다. Windows 실행 파일은 아직 코드 서명되지 않았습니다.
+
+### Android APK 고정 다운로드
+
+- 고정 다운로드 주소: <https://github.com/reezex0-ux/ai-snap-releases/releases/download/android-latest/AISnap-Android.apk>
+
+![Android install QR](assets/android-download-qr-v0.1.png)
+
+이 주소와 QR은 버전과 상관없이 항상 최신 Android 베타 APK를 가리킵니다. 새 개인 베타(`vX.Y.Z-personal`) 릴리스가 게시되면 주소와 QR은 그대로이고 받는 파일만 최신 버전으로 바뀌므로, **한 번만 공유하면 이후 업데이트에도 같은 QR을 계속 사용할 수 있습니다.** 내려받은 APK의 SHA-256과 원본 릴리스 태그는 같은 릴리스의 `APK-SHA256SUMS.txt`와 `metadata.json`에서 확인할 수 있습니다.
+
+Android는 APK를 내려받아도 설치를 자동으로 끝내지 않습니다. 필요하면 설정에서 이 출처의 앱 설치를 허용하고 설치 확인 창은 직접 눌러야 합니다. 설치·업데이트할 때는 **설치된 앱을 삭제하지 말고 기존 앱 위에 새 APK를 설치**하세요. 앱을 삭제하면 앱 안에 보관한 업무 사진이 사라집니다.
 
 업데이트는 앱을 종료한 뒤 새 Windows ZIP으로 교체하고 새 APK를 설치합니다. 설정은 Windows 사용자 폴더, 업무 사진은 Android 앱 전용 저장소에 있습니다. **Android 앱을 삭제하면 업무 사진이 사라지므로 기존 앱 위에 업데이트**하세요. Windows 자동실행을 켰다면 실행 파일의 폴더를 유지하세요.
 

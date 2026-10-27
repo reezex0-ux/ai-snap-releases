@@ -1,0 +1,122 @@
+name: Android latest APK
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-latest
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.event_name != 'release' || github.event.release.tag_name != 'android-latest'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify newest personal APK and update the fixed download
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          export CHANNEL_WORK="$(mktemp -d "$RUNNER_TEMP/android-latest.XXXXXX")"
+          trap 'rm -rf "$CHANNEL_WORK"; test ! -e "$CHANNEL_WORK"' EXIT
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import subprocess
+          import time
+
+          repo = os.environ['GH_REPO']
+          event = os.environ.get('EVENT_TAG', '')
+          work = Path(os.environ['CHANNEL_WORK'])
+          pattern = re.compile(r'^v(\d+)\.(\d+)\.(\d+)-personal$')
+          alias = 'android-latest'
+          checksum_name = 'APK-SHA256SUMS.txt'
+
+          def gh(*args):
+              return subprocess.check_output(['gh', *args], text=True)
+
+          def assets(release):
+              return {a['name']: a for a in release.get('assets', [])}
+
+          def ready(release):
+              files = assets(release)
+              apk = files.get(f"AISnap-Android-{release['tag_name']}.apk", {})
+              checksum = files.get(checksum_name, {})
+              return (apk.get('state') == 'uploaded' and apk.get('size', 0) > 0
+                      and re.fullmatch(r'sha256:[0-9a-f]{64}', apk.get('digest') or '')
+                      and checksum.get('state') == 'uploaded' and checksum.get('size', 0) > 0)
+
+          # A release event can arrive before gh finishes uploading its APK and checksum.
+          for attempt in range(20):
+              pages = json.loads(gh('api', '--paginate', '--slurp',
+                                    f'repos/{repo}/releases?per_page=100'))
+              releases = [r for page in pages for r in page]
+              candidates = [r for r in releases if not r['draft'] and pattern.fullmatch(r['tag_name'])]
+              if not candidates:
+                  raise RuntimeError('No published personal Android release exists')
+              newest = max(candidates, key=lambda r: tuple(map(int, pattern.fullmatch(r['tag_name']).groups())))
+              triggering = next((r for r in candidates if r['tag_name'] == event), None)
+              if ready(newest) and (not pattern.fullmatch(event) or (triggering and ready(triggering))):
+                  break
+              if attempt == 19:
+                  raise RuntimeError('Release assets are incomplete; fixed download was not changed')
+              time.sleep(10)
+
+          tag = newest['tag_name']
+          name = f'AISnap-Android-{tag}.apk'
+          expected = assets(newest)[name]['digest'].removeprefix('sha256:')
+          gh('release', 'download', tag, '--repo', repo, '--pattern', name,
+             '--pattern', checksum_name, '--dir', str(work))
+          apk = work / name
+          actual = hashlib.sha256(apk.read_bytes()).hexdigest()
+          entries = [line.split(maxsplit=1) for line in (work / checksum_name).read_text().splitlines()]
+          if actual != expected or not any(len(e) == 2 and e[0].lower() == actual
+                                          and e[1].lstrip('*') == name for e in entries):
+              raise RuntimeError('Source APK does not match its API digest and checksum')
+
+          fixed = work / 'AISnap-Android.apk'
+          apk.rename(fixed)
+          (work / checksum_name).write_text(f'{actual}  {fixed.name}\n')
+          (work / 'metadata.json').write_text(json.dumps({
+              'sourceTag': tag, 'version': tag[1:], 'sha256': actual,
+          }, indent=2) + '\n')
+          url = f'https://github.com/{repo}/releases/download/{alias}/{fixed.name}'
+          notes = work / 'notes.md'
+          notes.write_text(f'Current Android version: **{tag[1:]}**\n\n'
+                           f'[Download the latest APK]({url})\n\n'
+                           f'[Original release](https://github.com/{repo}/releases/tag/{tag})\n\n'
+                           'Keep this download URL and QR for future updates. '
+                           'Install over the existing app to preserve photos and PC registrations.\n')
+          outputs = [fixed, work / checksum_name, work / 'metadata.json']
+          current = next((r for r in releases if r['tag_name'] == alias), None)
+          if current:
+              pending = [p for p in outputs if assets(current).get(p.name, {}).get('digest')
+                         != 'sha256:' + hashlib.sha256(p.read_bytes()).hexdigest()]
+              if pending:
+                  gh('release', 'upload', alias, '--repo', repo, '--clobber', *map(str, pending))
+              gh('release', 'edit', alias, '--repo', repo, '--prerelease', '--draft=false',
+                 '--title', 'Android latest APK', '--notes-file', str(notes))
+          else:
+              gh('release', 'create', alias, '--repo', repo, '--target', 'main', '--prerelease',
+                 '--title', 'Android latest APK', '--notes-file', str(notes), *map(str, outputs))
+
+          published = json.loads(gh('api', f'repos/{repo}/releases/tags/{alias}'))
+          for output in outputs:
+              if assets(published).get(output.name, {}).get('digest') != 'sha256:' + hashlib.sha256(output.read_bytes()).hexdigest():
+                  raise RuntimeError(f'Published alias verification failed: {output.name}')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f'Latest Android: **{tag}**\n\n[Permanent download]({url})\n\nSHA-256: `{actual}`\n')
+          print(f'{alias} now serves {tag}; SHA-256 {actual}')
+          PY
